@@ -315,6 +315,8 @@ class uslf_weights():
         with values depending on the 'inverse area' of the concentric ellipse touching the actual pixel, if
         the angle alpha is preserved and as a consequence the foci are moved towards the center.
         
+        -'alpha' is a constant or if an array: len(alpha) should be equal to start_p.shape[0]
+
         '''
 
         # If the start_p and stop_p parameters have more than 1 entry, it implies we will save each matrix as a row vector of the output matrix
@@ -325,7 +327,7 @@ class uslf_weights():
         
         # Multiple line segment
         if start_p.ndim > 1:
-            output_matrix = np.zeros((len(start_p), self.Nx*self.Ny))
+            output_matrix = np.zeros((start_p.shape[0], self.Nx*self.Ny))
             
             # Loop over line segments
             for idx_line, line in enumerate(zip(start_p, stop_p)):
@@ -342,9 +344,12 @@ class uslf_weights():
 
                 ell_variable_c = np.linalg.norm(g_ell_center - foc_2)
 
-                # Beta is the angle from the height at the center to the first foci
-                beta = 180 - 90 - alpha
-
+                # Beta is the angle from the height at the center to the first foci 
+                if len(alpha) > 1:
+                    beta = 180 - 90 - alpha[idx_line]
+                else:
+                    beta = 180 - 90 - alpha
+                
                 # Law of sines: 
                 #   height         width          ||center - foc_1||
                 #  -------    =  --------   =  ----------------------
@@ -380,7 +385,7 @@ class uslf_weights():
                 idx_inside_ellipse = np.where(rad_cc <= 1.)
 
                 for cnt, val in enumerate(idx_inside_ellipse[0]):
-                    output_matrix[idx_line, val*self.Nx + idx_inside_ellipse[1][cnt]] = 1
+                    output_matrix[idx_line, val*self.Nx + idx_inside_ellipse[1][cnt]] = 1/(np.pi*g_ell_height*rad_cc[val, idx_inside_ellipse[1][cnt]]*g_ell_width*rad_cc[val, idx_inside_ellipse[1][cnt]])
                             
                 # Linear index of matrix goes over columns and then changes to row:
                 # Example with a 3 x 4 matrix
@@ -449,6 +454,85 @@ class uslf_weights():
             
         return output_matrix, g_ellipse
 
+    def fill_matrix_apm_piecewise_curve(self, xcg, ycg, alpha, input_curves, verbose=False, save_ell_plot=False, **kwargs):
+        '''
+        
+        Same as 'fill_matrix_apm_3' but instead of line segments, piecewise curves are specified through the
+        the variable 'input_curves'. Precisely, 'input_curves' is a list, whose entries represent the curves, 
+        and where each curve (entry of 'input_curves') has 2 or more points defining it. In this case a pixel
+        can be touched multiple times by an ellipse, since there are n_{i}-1 ellipses for pieceiwse curve i. 
+
+        We add the IAEM values at a pixel, indicating a region more frequented.
+
+        option ---> 'combine_paths' ---> 'add'
+                                    ---> 'weighted_add' --> provide another option named 'weights' with a list of arrays
+
+
+        '''
+        
+        # Multiple line segment       
+        output_matrix = np.zeros((len(input_curves), self.Nx*self.Ny))
+
+        ''' 
+            Check if input_curves is a list of lists of arrays or a list of arrays:
+                        [time idx][path idx][curve seg idx] --> list of lists of arrays
+                        [time idx][curve seg idx] --> list of arrays
+        '''
+        if type(input_curves[0]).__name__ == 'list':
+            if save_ell_plot:
+                g_ellipses = []
+    
+            for idx_t, pths_t in enumerate(input_curves):
+                if save_ell_plot:
+                    g_ellipses.append([])
+    
+                for idx_pth, c_pth_t in enumerate(pths_t):
+                    start_p = c_pth_t[:-1, :]
+                    stop_p = c_pth_t[1:, :]
+
+                    # List of lists of ellipses if 'save_ell_plot' is true
+                    if save_ell_plot:
+                        apm_pth_t, gell = self.fill_matrix_apm_3(xcg, ycg, alpha[idx_t][idx_pth], start_p, stop_p, save_ell_plot=True, verbose=verbose)
+                        g_ellipses[idx_t].append(gell)
+                    else:
+                        apm_pth_t, _ = self.fill_matrix_apm_3(xcg, ycg, alpha[idx_t][idx_pth], start_p, stop_p, save_ell_plot=False, verbose=verbose)
+
+
+                    for key, val in kwargs.items():
+                        if key == 'combine_paths':    
+                            if val == 'add':
+                                output_matrix[idx_t, :] = output_matrix[idx_t, :] + np.sum(apm_pth_t, axis=0)
+                            elif val == 'weighted_add':
+                                '''
+                                     The weights must be provided in an input argument named 'path_weights'
+                                     and formatted as a list of arrays: the list is for the time snaps, 
+                                     and the array is for the weight of each path of the given time snap 
+
+                                '''
+                                output_matrix[idx_t, :] = output_matrix[idx_t, :] + np.sum(apm_pth_t, axis=0)*kwargs['path_weights'][idx_t][idx_pth]
+
+        elif type(input_curves[0]).__name__ == 'ndarray':
+            if save_ell_plot:
+                g_ellipses = []
+
+            for idx_ct, ct in enumerate(input_curves):
+                start_p = ct[:-1, :]
+                stop_p = ct[1:, :]
+
+                # List of lists of ellipses if 'save_ell_plot' is true
+                if save_ell_plot:
+                    apm_ct, gell = self.fill_matrix_apm_3(xcg, ycg, alpha[idx_ct], start_p, stop_p, save_ell_plot=True, verbose=verbose)
+                    g_ellipses.append(gell)
+                else:
+                    apm_ct, _ = self.fill_matrix_apm_3(xcg, ycg, alpha[idx_ct], start_p, stop_p, save_ell_plot=False, verbose=verbose)
+
+                output_matrix[idx_ct, :] = np.sum(apm_ct, axis=0)
+        
+        if save_ell_plot:
+            return output_matrix, g_ellipses
+        else:
+            return output_matrix
+
     def plot_apm(self, start_p, stop_p, xe, ye, output_matrix, cmp=None, figsz=(8,5)):
         '''
         xe--> edges in x-axis
@@ -461,6 +545,33 @@ class uslf_weights():
         fig, ax = plt.subplots(figsize=figsz)
 
         ax.scatter([start_p[0], stop_p[0]], [start_p[1], stop_p[1]])
+        
+        if cmp is None:
+            ax.imshow(np.flip(output_matrix, 0), cmap ='Greys', extent =[0, self.x_max, 0, self.y_max])
+        else:
+            ax.imshow(np.flip(output_matrix, 0), cmap =cmp, extent =[0, self.x_max, 0, self.y_max])
+        
+        plt.xticks(xe)
+        plt.yticks(ye)
+        ax.grid(True)
+
+        #plt.show()
+        return ax
+
+    def plot_apm_piecewise_curve(self, actual_input_curve, xe, ye, output_matrix, cmp=None, figsz=(8,5)):
+        '''
+        xe--> edges in x-axis
+        ye--> edges in y-axis
+
+        '''
+
+        fig, ax = plt.subplots(figsize=figsz)
+
+        if type(actual_input_curve).__name__ == 'list':
+            for pth in actual_input_curve:
+                ax.scatter(pth[:, 0], pth[:, 1])
+        elif type(actual_input_curve).__name__ == 'ndarray':
+            ax.scatter(actual_input_curve[:, 0], actual_input_curve[:, 1])
         
         if cmp is None:
             ax.imshow(np.flip(output_matrix, 0), cmap ='Greys', extent =[0, self.x_max, 0, self.y_max])
