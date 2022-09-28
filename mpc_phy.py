@@ -261,7 +261,7 @@ class mpc_phy():
 
         return np.arctan2(center_traj_direction[1], center_traj_direction[0])
 
-    def build_mpc_path_points(self, aoa, aod, ms, bs, poly_buildings):
+    def build_mpc_path_points(self, aoa, aod, ms, BS, poly_buildings, bounce_making_policy='first'):
         '''
             Build the points (vertexes) of the piecewise curve
 
@@ -269,33 +269,59 @@ class mpc_phy():
             by the unitary direction vector (cos(theta), sen(theta))
 
             This code is made for piecewise-curves composed by exactly 3 Line segments.
+
+            `bounce_making_policy`: string. 
+
+            For each line segment (either line_1 or line_2 there might be multiple intersections with the same and more buildings)
+            the 'bounce_making_policy' variable decides how to handle the (possibly) multiple intersections for only 1 line segment
+
+            The 'first' policy only takes the intercept that is closest in distance: 
+            From a propagation perspective this means that as this bounce is closer it has more energy than the other intersections, that might appear
+            after energy is dissipated in other directions with different powers
         
         '''        
-        rref = 100
+        d_ref = 100
 
-        path_first_line_seg = []
+        bs = [self.bs[BS]['x'], self.bs[BS]['y']]
 
-        
-        for idx_t, ang_d in enumerate(aod):
-            end_pt_first_line_seg = ms[idx_t, :] + rref*np.column_stack((np.cos(ang_d), np.sin(ang_d)))
+        dep_paths = []
+        arr_paths = []
+        for t, aods_t in enumerate(aod):
+            dep_paths.append([])
+            arr_paths.append([])
             
-            path_first_line_seg.append([])
-            for idx_pth, end_pt_first_seg in enumerate(end_pt_first_line_seg):
+            # Direction pointing to AoD
+            unitary_direction_aod = np.column_stack((np.cos(aods_t), np.sin(aods_t))) 
+            bounces_dep = ms[t, :] + d_ref*unitary_direction_aod
+
+            # Direction pointing to AoA
+            unitary_direction_aoa = np.column_stack((np.cos(aoa[t]), np.sin(aoa[t])))
+            bounces_arr = bs + d_ref*unitary_direction_aoa  
+
+            for idx_mpc, bounce in enumerate(bounces_dep):
+                line_1 = LineString([(ms[t, :]), (bounce)])
+                line_2 = LineString([(bounces_arr[idx_mpc, :]), (bs)])
+
+                print(idx_mpc)
+                print(line_1, line_2) 
+
+                idx_build_dep, coord_dep_bounces = zip(*[[idx, line_1.intersection(b).coords[:]] for idx, b in enumerate(poly_buildings) if line_1.intersection(b)])
+                idx_build_arr, coord_arr_bounces = zip(*[[idx, line_2.intersection(b).coords[:]] for idx, b in enumerate(poly_buildings) if line_2.intersection(b)])
+
+                if bounce_making_policy == 'first':
+                    coord_dep_bounces = coord_dep_bounces[0][0]
+                    coord_arr_bounces = coord_arr_bounces[0][0]
+
+                    idx_build_dep = idx_build_dep[0]
+                    idx_build_arr = idx_build_arr[0]
+
+                elif bounce_making_policy == 'combine':
+                    1
                 
-                first_line = LineString([(ms[idx_t, :]), (end_pt_first_seg)])
-                path_first_line_seg.append(first_line)
+                dep_paths[t].append(coord_dep_bounces)
+                arr_paths[t].append(coord_arr_bounces)
 
-                first_bounce = list(poly_buildings.intersection(first_line).coords)   
-
-                print(first_line, first_bounce)
-
-                break
-        
-            break
-
-        # First intercept from aoa
-
-
+        return dep_paths, arr_paths
 
     def plot_buildings(self, building_polygons):
         '''
