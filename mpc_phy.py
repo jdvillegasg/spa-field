@@ -58,6 +58,12 @@ class mpc_phy():
     bs = {'MXW': [50.668627, 4.623663], 'MKT': [50.669280, 4.620146]}
 
     def __init__(self, path_buildings, omit_this_buildings):
+        """_summary_
+
+        Args:
+            path_buildings (_type_): _description_
+            omit_this_buildings (_type_): _description_
+        """
 
         # Load the buildings matfile with the vertexes of the buildings
         matfile = sio.loadmat(path_buildings)
@@ -104,6 +110,15 @@ class mpc_phy():
         self.buildings = np.vstack((st_pt['x'], fn_pt['x'], st_pt['y'], fn_pt['y'])).T
 
     def omit_buildings(self, buildings, list_building_number):
+        """_summary_
+
+        Args:
+            buildings (_type_): _description_
+            list_building_number (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         '''
             The numbers for the buildings are predefined
         '''
@@ -123,6 +138,11 @@ class mpc_phy():
         return buildings_MATX_erase_rows
 
     def make_polygon_buildings(self):
+        """_summary_
+
+        Returns:
+            _type_: _description_
+        """
         '''
             Make a list of Polygon objects, each one representing the contour of a building
         '''
@@ -139,6 +159,18 @@ class mpc_phy():
         return building_polygons
 
     def get_ms_coordinates(self, ms_file_path, gps_file_num, BS, nCycles, cycleRate):
+        """_summary_
+
+        Args:
+            ms_file_path (_type_): _description_
+            gps_file_num (_type_): _description_
+            BS (_type_): _description_
+            nCycles (_type_): _description_
+            cycleRate (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         
         '''  
             Get MS coordinates from gps file
@@ -237,6 +269,15 @@ class mpc_phy():
         return ms_interpolated
 
     def set_aod_reference(self, ms, BS):
+        """_summary_
+
+        Args:
+            ms (_type_): _description_
+            BS (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         '''
             LoS direction for the MS coordinates entered by parameters
 
@@ -246,6 +287,15 @@ class mpc_phy():
         return np.arctan2(LoS_direction[:, 1], LoS_direction[:,0])  
     
     def set_aoa_reference(self, BS, route='st_barbe'):
+        """_summary_
+
+        Args:
+            BS (_type_): _description_
+            route (str, optional): _description_. Defaults to 'st_barbe'.
+
+        Returns:
+            _type_: _description_
+        """
         '''
             The Azimuthal AoA reference. The center trajectories for the other routes
             must be provided
@@ -262,6 +312,19 @@ class mpc_phy():
         return np.arctan2(center_traj_direction[1], center_traj_direction[0])
 
     def build_mpc_path_points(self, aoa, aod, ms, BS, poly_buildings, bounce_making_policy='first'):
+        """_summary_
+
+        Args:
+            aoa (_type_): _description_
+            aod (_type_): _description_
+            ms (_type_): _description_
+            BS (_type_): _description_
+            poly_buildings (_type_): _description_
+            bounce_making_policy (str, optional): _description_. Defaults to 'first'.
+
+        Returns:
+            _type_: _description_
+        """
         '''
             Build the points (vertexes) of the piecewise curve
 
@@ -324,6 +387,14 @@ class mpc_phy():
         return dep_paths, arr_paths
 
     def plot_buildings(self, building_polygons):
+        """_summary_
+
+        Args:
+            building_polygons (_type_): _description_
+
+        Returns:
+            _type_: _description_
+        """
         '''
             Plot the contour of the buildings
         '''
